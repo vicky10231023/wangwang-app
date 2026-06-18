@@ -69,6 +69,7 @@ def get_ws():
     return ws
 
 
+@st.cache_data(ttl=60, show_spinner=False)
 def read_df():
     ws = get_ws()
     rows = ws.get_all_records()
@@ -99,6 +100,7 @@ def upsert_today(date, total_value, note=""):
         ws.update(values=[row], range_name=f"A{r}")
     else:
         ws.append_row(row)
+    read_df.clear()  # 写入后清缓存,下次读最新
     return m
 
 
@@ -258,10 +260,14 @@ def main():
     try:
         df = read_df()
     except Exception as e:
-        st.error(f"连不上 Google Sheet:{e}")
-        st.markdown('<div class="note">检查:① Secrets 里 gcp_service_account 填好了吗 '
-                    '② 表「望望数据库」共享给 bot 邮箱(编辑者)了吗 ③ Sheets/Drive API 开了吗</div>',
-                    unsafe_allow_html=True)
+        msg = str(e)
+        if "429" in msg or "Quota" in msg:
+            st.warning("读取太频繁,撞到 Google 每分钟限速。等 1 分钟再刷新即可(已加缓存,后面不会再频繁了)。")
+        else:
+            st.error(f"连不上 Google Sheet:{e}")
+            st.markdown('<div class="note">检查:① Secrets 里 gcp_service_account 填好了吗 '
+                        '② 表「望望数据库」共享给 bot 邮箱(编辑者)了吗 ③ Sheets/Drive API 开了吗</div>',
+                        unsafe_allow_html=True)
         return
 
     latest = df.iloc[-1].to_dict() if not df.empty else None
@@ -283,3 +289,5 @@ def main():
 
 
 main()
+
+
