@@ -65,7 +65,7 @@ def get_ws():
     # 确保表头
     first = ws.row_values(1)
     if first != C.HEADERS:
-        ws.update("A1", [C.HEADERS])
+        ws.update(values=[C.HEADERS], range_name="A1")
     return ws
 
 
@@ -83,20 +83,22 @@ def upsert_today(date, total_value, note=""):
     """按日期写入/更新一行;自动算盈亏、累计、峰值、回撤。"""
     ws = get_ws()
     df = read_df()
-    prev = df[df["date"] < date]
-    prev_value = float(prev.iloc[-1]["total_value"]) if not prev.empty else None
-    prev_peak = float(prev["peak_value"].max()) if not prev.empty else None
+    if df.empty or "date" not in df.columns:
+        prev_value, prev_peak, existing = None, None, []
+    else:
+        prev = df[df["date"] < date]
+        prev_value = float(prev.iloc[-1]["total_value"]) if not prev.empty else None
+        prev_peak = float(prev["peak_value"].max()) if not prev.empty else None
+        existing = df.index[df["date"] == date].tolist()
     m = L.compute_row(C.START_CAPITAL, prev_value, prev_peak, float(total_value))
     row = [str(date), float(total_value), m["day_pnl_pct"], m["cum_return_pct"],
            m["peak_value"], m["drawdown_pct"], note]
     # 同日存在则更新,否则追加
-    existing = df.index[df["date"] == date].tolist()
     if existing:
         r = existing[0] + 2  # +2: 表头 + 0索引
-        ws.update(f"A{r}", [row])
+        ws.update(values=[row], range_name=f"A{r}")
     else:
         ws.append_row(row)
-    read_df.clear() if hasattr(read_df, "clear") else None
     return m
 
 
